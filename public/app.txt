@@ -1,0 +1,157 @@
+// app.js
+let scene, camera, renderer, model, controls;
+
+init();
+animate();
+
+function init() {
+  // Create scene
+  scene = new THREE.Scene();
+  
+  // Create and position the camera
+  camera = new THREE.PerspectiveCamera(
+    75,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    1000
+  );
+  camera.position.set(0, 0, 5);
+  
+  // Set up renderer with antialias for smoother edges
+  renderer = new THREE.WebGLRenderer({
+    canvas: document.getElementById('canvas'),
+    alpha: true,
+    antialias: true
+  });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setClearColor(0x000000, 1);
+  
+  // Add orbit controls using THREE.OrbitControls (now defined by the script)
+  controls = new THREE.OrbitControls(camera, renderer.domElement);
+  
+  // Add lights
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+  scene.add(ambientLight);
+  
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+  directionalLight.position.set(5, 10, 7.5);
+  scene.add(directionalLight);
+  
+  // Add an AxesHelper for debugging (size increased for visibility)
+  const axesHelper = new THREE.AxesHelper(10);
+  scene.add(axesHelper);
+  
+  // Add a GridHelper with custom colors
+  const gridHelper = new THREE.GridHelper(20, 20, new THREE.Color(0x444444), new THREE.Color(0x888888));
+  scene.add(gridHelper);
+  
+  // Load the glTF model
+  const loader = new THREE.GLTFLoader();
+  loader.load(
+    'Assets/1test.glb',
+    function (gltf) {
+      console.log("Model loaded successfully:", gltf);
+      
+      // Use gltf.scene, fallback to gltf.scenes[0] if needed
+      model = gltf.scene;
+      if (!model || (model && model.children.length === 0)) {
+        if (gltf.scenes && gltf.scenes.length > 0) {
+          model = gltf.scenes[0];
+          console.log("Using gltf.scenes[0] as the model");
+        } else {
+          console.error("No valid model found in the glTF file.");
+          return;
+        }
+      }
+      
+      console.log("Model children:", model.children);
+      
+      // Compute the bounding box to center and scale the model
+      const box = new THREE.Box3().setFromObject(model);
+      console.log("Model bounding box:", box);
+      
+      const sizeVector = box.getSize(new THREE.Vector3());
+      const size = sizeVector.length();
+      if (size === 0) {
+        console.error("Invalid bounding box size. The model may be empty or exported incorrectly.");
+        return;
+      }
+      
+      // Center the model so its center is at (0, 0, 0)
+      const center = box.getCenter(new THREE.Vector3());
+      model.position.sub(center);
+      console.log("Model centered. New position:", model.position);
+      
+      // Increase base scale factor for better visibility (adjust multiplier as needed)
+      const scaleFactor = 10 / size;
+      model.scale.set(scaleFactor, scaleFactor, scaleFactor);
+      model.userData.baseScale = scaleFactor;
+      console.log("Model scale set to:", model.scale);
+      
+      scene.add(model);
+    },
+    undefined,
+    function (error) {
+      console.error("Error loading model:", error);
+    }
+  );
+  
+  // Responsive canvas
+  window.addEventListener('resize', onWindowResize, false);
+  
+  // Set up color controls
+  document.getElementById('applyColor').addEventListener('click', () => {
+    let hex = document.getElementById('colorInput').value;
+    updateModelColor(hex);
+  });
+  
+  document.querySelectorAll('.preset').forEach(button => {
+    button.addEventListener('click', () => {
+      let hex = button.getAttribute('data-color');
+      updateModelColor(hex);
+    });
+  });
+  
+  // Set up scale slider
+  document.getElementById('scaleSlider').addEventListener('input', (e) => {
+    if (model) {
+      const baseScale = model.userData.baseScale || 1;
+      const scaleValue = parseFloat(e.target.value);
+      model.scale.set(
+        baseScale * scaleValue,
+        baseScale * scaleValue,
+        baseScale * scaleValue
+      );
+    }
+  });
+}
+
+function onWindowResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+function updateModelColor(hex) {
+  if (!model) return;
+  const color = new THREE.Color(hex);
+  model.traverse(child => {
+    if (child.isMesh) {
+      child.material.color.set(color);
+    }
+  });
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+  
+  // Update orbit controls
+  if (controls) controls.update();
+  
+  // Optionally rotate the model slowly for dynamic viewing
+  if (model) {
+    model.rotation.y += 0.005;
+  }
+  
+  renderer.render(scene, camera);
+}
